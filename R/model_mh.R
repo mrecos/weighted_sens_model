@@ -6,10 +6,16 @@ library("sp")
 library("mapview")
 library("FedData")
 library("elevatr")
+library("snow")    # Parallel
 
 ## Data locations
 data_loc <- "U:/z_OldServer/Projects/NY/Oakdale_Fayette_model/GIS"
 SHP_loc  <- file.path(data_loc,"SHP","Client_files")
+
+## ignored folders
+if(!dir.exists("RASTERS")){
+  dir.create("RASTERS")
+}
 
 ## projections details
 # unprojected WGS84
@@ -36,12 +42,21 @@ cl_5mi_buffSP  <- st_intersection(cl_5mi_buffSP, temp_bboxSP)  #### <- CROPPED F
 cl_5mi_buffWGS <- st_transform(cl_5mi_buffSP, WGS84)
 cl_5mi_buffWGS_sp <- as(cl_5mi_buffWGS, "Spatial")
 
+### buffering bigger!
+cl_525mi_buffSP  <- st_buffer(st_combine(clSP), 27720) %>%
+  st_sf(.) %>%
+  mutate(value = 1)
+cl_525mi_buffSP  <- st_intersection(cl_525mi_buffSP, temp_bboxSP)  #### <- CROPPED FOR TESTING!!!!!!!
+cl_525mi_buffSP_sp <- as(cl_5mi_buffSP, "Spatial")
 
-### RASTERS!!!! FTW!
+beginCluster(8) ###### <- PARALLEL n=cores!!
+
+#### RASTERS!!!! FTW!
 ### get Elevation data & crop
 elevation_full <- get_elev_raster(cl_5mi_buffWGS_sp, z = 12, src = "aws")
 elevation <- mask(elevation_full, cl_5mi_buffWGS_sp)
 elevationSP <- projectRaster(elevation, crs = CRS(SPNYCentral83), res = 50)
+# writeRaster(elevationSP,file.path("RASTERS","elevationSP.tiff"))
 m1 <- mapview(elevationSP)
 m2 <- mapview(sitesSP)
 # m1 + m2
@@ -50,37 +65,53 @@ m2 <- mapview(sitesSP)
 slope <- raster::terrain(elevation, out = "slope", unit='radians')
 slope <- tan(slope)*100
 slopeSP <- projectRaster(slope, elevationSP)
-writeRaster(slopeSP,file.path("RASTERS","slop_degree.tiff"))
-
+# writeRaster(slopeSP,file.path("RASTERS","slop_degree.tiff"))
 m3 <- mapview(slopeSP)
 # m2 + m3
 
 ### NED 
-NHD <- FedData::get_nhd(template=cl_5mi_buffWGS_sp, label='test')
+NHD <- FedData::get_nhd(template=cl_525mi_buffWGS_sp, label='test')
+# flowlines
 flowlines <- NHD[["_Flowline"]]
 flowlinesSP <- spTransform(flowlines, SPNYCentral83)
 flowlinesSP_r <- rasterize(flowlinesSP, elevationSP)
-# writeRaster(flowlinesSP_r,file.path("RASTERS","flowlines.tiff"))
-
+flowlinesSP_r[flowlinesSP_r > 0] <- 1
+# writeRaster(flowlinesSP_r,file.path("RASTERS","flowlines.tiff"), overwrite=TRUE)
 m4 <- mapview(flowlinesSP_r)
+flowlinesSP_dist <- raster::distance(flowlinesSP_r)
+flowlinesSP_dist <- projectRaster(flowlinesSP_dist, elevationSP)
+flowlinesSP_dist <- mask(flowlinesSP_dist, elevationSP)
+# writeRaster(flowlinesSP_dist,file.path("RASTERS","fflowlinesSP_dist.tiff"), overwrite=TRUE)
+m5 <- mapview(flowlinesSP_dist)
+
+## AREA (large streams)
+areas <- NHD[["_Area"]]
+m6_a <- mapview(areas)
+areasSP <- spTransform(areas, SPNYCentral83)
+areasSP_r <- rasterize(areasSP, elevationSP)
+areasSP_r[areasSP_r > 0] <- 1
+# writeRaster(areasSP_r,file.path("RASTERS","areasSP.tiff"), overwrite=TRUE)
+m6 <- mapview(areasSP_r)
+areasSP_dist <- raster::distance(areasSP_r)
+areasSP_dist <- projectRaster(areasSP_dist, elevationSP)
+areasSP_dist <- mask(areasSP_dist, elevationSP)
+# writeRaster(areasSP_dist,file.path("RASTERS","areasSP_dist.tiff"), overwrite=TRUE)
+m7 <- mapview(areasSP_dist)
+
+## Waterbodies
+waterbody <- NHD[["_Waterbody"]]
+m8_a <- mapview(waterbody)
+waterbodySP <- spTransform(waterbody, SPNYCentral83)
+waterbodySP_r <- rasterize(waterbodySP, elevationSP)
+waterbodySP_r[waterbodySP_r > 0] <- 1
+writeRaster(waterbodySP_r,file.path("RASTERS","waterbodySP.tiff"), overwrite=TRUE)
+m8 <- mapview(waterbodySP_r)
+waterbodySP_dist <- raster::distance(waterbodySP_r)
+waterbodySP_dist <- projectRaster(waterbodySP_dist, elevationSP)
+waterbodySP_dist <- mask(waterbodySP_dist, elevationSP)
+# writeRaster(waterbodySP_dist,file.path("RASTERS","waterbodySP_dist.tiff"), overwrite=TRUE)
+m9 <- mapview(waterbodySP_dist)
+
+### take min of H20 dists for min to H20
 
 
-
-##### TESTING BELOW HERE ##############
-## Flowlines and distance to
-flowlines <- NHD[["_Flowline"]]
-flowlines_UTM18N83 <- spTransform(flowlines, CRS(proj4string(PASS_bound_UTM18N83_buff_0_r)))
-flowlines_UTM18N83_r <- rasterize(flowlines_UTM18N83, PASS_bound_UTM18N83_buff_0_r)
-flowlines_UTM18N83_r[flowlines_UTM18N83_r > 0] <- 1
-flowlines_dist_UTM18N83 <- raster::distance(flowlines_UTM18N83_r)
-flowlines_dist <- projectRaster(flowlines_dist_UTM18N83, crs = proj_dd)
-flowlines_dist <- crop(flowlines_dist, PASS_bound_r)
-flow_scale_factor <- ppside * (floor(dim(flowlines_dist)[1]/ppside))
-flow_rescale <- flowlines_dist
-dim(flow_rescale) <- c(flow_scale_factor, flow_scale_factor)
-flowlines_dist <- resample(flowlines_dist, elevation)
-flowlines_dist <- raster::scale(flowlines_dist)
-# plot
-plot(flowlines_dist)
-plot(PASS_bound_sp, add = TRUE)
-plot(PASS_sp, add = TRUE)
