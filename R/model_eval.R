@@ -88,21 +88,25 @@ model_sens1 <- extract_values %>%
   tidyr::nest(-model_num) %>%
   mutate(rand_smpl = map(model_num, get_random_sample, sum_stack, 50000))
 
+######### min(asb()) needs to be closest without going over (price is right rules) intead of absolute closest
 model_sens2 <- model_sens1 %>%
   mutate(rand_smpl_freq = map(rand_smpl, tabulate_sample),
          site_smpl_freq = map(data, ~tabulate_sample(.[["sens"]])),
          freq_merge     = map2(rand_smpl_freq, site_smpl_freq, cumulative_sum),
-         max_kg         = map_dbl(freq_merge, ~ max(.[["kg"]])),
-         kg_sites_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "site_smpl_revCumPcnt"]),
-         kg_backg_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "rand_smpl_revCumPcnt"]),
-         kg_threshold   = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "value"])) %>%
-  arrange(desc(max_kg))
+         # max_kg         = map_dbl(freq_merge, ~ max(.[["kg"]])),
+         # kg_sites_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "site_smpl_revCumPcnt"]),
+         # kg_backg_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "rand_smpl_revCumPcnt"]),
+         # kg_threshold   = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "value"]),
+         bkg_sites_high    = map_dbl(freq_merge,  ~ .[which.min(abs(.[,"site_smpl_revCumPcnt"]-75)), "rand_smpl_revCumPcnt"]),
+         sites_high_thold  = map2_dbl(freq_merge, bkg_sites_high, ~ .x[.x[,"rand_smpl_revCumPcnt"] == .y, "value"]),
+         bkg_sites_mod     = map_dbl(freq_merge,  ~ .[which.min(abs(.[,"site_smpl_revCumPcnt"]-92)), "rand_smpl_revCumPcnt"]),
+         sites_mod_thold   = map2_dbl(freq_merge, bkg_sites_mod, ~ .x[.x[,"rand_smpl_revCumPcnt"] == .y, "value"])) 
 
 max_kg_results <- model_sens2 %>%
-  dplyr::select(model_num, max_kg, kg_sites_pcnt, kg_backg_pcnt, kg_threshold)
+  dplyr::select(model_num, bkg_sites_high, sites_high_thold, bkg_sites_mod, sites_mod_thold)
 
 # view selected model's freq table
-model_sens2 %>% filter(model_num == 11) %>% select(freq_merge) %>% unnest()
+model_sens2 %>% filter(model_num == 15) %>% select(freq_merge) %>% unnest()
 
 
 
