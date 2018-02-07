@@ -65,7 +65,7 @@ for (i in 1:as.integer(ncol(h20_rcl_m)-2)){
   rclmat <- cbind(h20_rcl_m[,1], h20_rcl_m[,2], h20_rcl_m[,i+2])
   print(rclmat)
   rc_h20 <- reclassify(H20, rclmat,  progress='text')
-  print("reclassified")
+  cat("reclassified")
   fname <- file.path(GRD_loc, "GRD", "RECLASS", paste0("h20_rcl_", i, ".grd"))
   rname <- paste(c("h20_rcl_", i), collapse = '')
   print(fname)
@@ -79,12 +79,12 @@ sum_stack <- stack()
 system.time({
   for (i in 1:as.integer(ncol(slp_rcl_m)-2)){       
     slp_tmp = raster(slp_stack,layer=i)
-    print(paste(c("slp_rcl_", i, " summed with:"), collapse = ''))
+    cat("slp_rcl_", i, " summed with:")
     for (j in 1:as.integer(ncol(h20_rcl_m)-2)){
       h20_tmp = raster(hyd_stack, layer=j)
       z = slp_tmp + h20_tmp
       sum_stack <- stack(sum_stack, z)
-      print(paste(c("h20_rcl_", j, " = layer", nlayers(sum_stack)), collapse = ''))	
+      cat("h20_rcl_", j, " = layer", nlayers(sum_stack))
     }
   }
 })
@@ -94,9 +94,9 @@ system.time({
   for (i in 1:nlayers(sum_stack)) {
     out_fname <- file.path(GRD_loc, "GRD", "SUMMED", paste0("sum_", i, ".grd"))
     out_rast = raster(sum_stack, layer=i)
-    print(paste(c("Acquired summed raster: ", i) , collapse = ''))
+    cat("Acquired summed raster: ", i)
     writeRaster(out_rast, filename= out_fname, progress='text')
-    print(paste(c("Saved summed raster: ", out_fname) , collapse = ''))
+    cat("Saved summed raster: ", out_fname)
   }
 })
 

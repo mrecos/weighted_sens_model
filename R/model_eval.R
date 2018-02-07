@@ -43,5 +43,63 @@ write.csv(extract_values, file.path(GRD_loc, "RESULTS", "extracted_sens_values.c
 
 extract_values %>%
   group_by(model_num) %>%
-  summarise(median = median(sens)) %>%
+  summarise(median = median(sens),
+            n = n()) %>%
   arrange(desc(median))
+
+get_random_sample <- function(model_num, stack, sample_size){
+  raster <- stack[[model_num]]
+  cat("Sampling raster:", model_num, "\n")
+  rand_smpl <- sampleRandom(raster, sample_size)
+}
+
+tabulate_sample <- function(smpl, steep = 99){
+  smpl_freq <- as.data.frame(table(smpl), stringsAsFactors = FALSE)  %>%
+    mutate_if(is.character, as.numeric)
+  if(max(smpl_freq[,1]) > 98){
+    over <- smpl_freq[which(smpl_freq[,1] >= 98), ]
+    over98_sum <- sum(over[,2])
+    smpl_freq[1,2] <- smpl_freq[1,2] + over98_sum
+    smpl_freq <- smpl_freq[-which(smpl_freq[,1] >= 98), ]
+  }
+  colnames(smpl_freq) <- c("value", "count")	
+  return(smpl_freq)
+}
+cumulative_sum <- function(rand_smpl_freq,site_smpl_freq){
+  rand_smpl_CumFreq = cumsum(rand_smpl_freq[,2])
+  site_smpl_CumFreq = cumsum(site_smpl_freq[,2])
+  rand_smpl_revCumFreq <- rev(cumsum(rev(rand_smpl_freq[,2])))
+  site_smpl_revCumFreq <- rev(cumsum(rev(site_smpl_freq[,2])))
+  rand_smpl_revCumPcnt <- (rand_smpl_revCumFreq/sum(rand_smpl_freq[,2]))*100
+  site_smpl_revCumPcnt <- (site_smpl_revCumFreq/sum(site_smpl_freq[,2]))*100
+  rand_smpl_CumPcnt <- (rand_smpl_CumFreq/sum(rand_smpl_freq[,2]))*100
+  site_smpl_CumPcnt <- (site_smpl_CumFreq/sum(site_smpl_freq[,2]))*100
+  rand_smpl_freq <- cbind(rand_smpl_freq, rand_smpl_revCumFreq, rand_smpl_revCumPcnt)
+  site_smpl_freq <- cbind(site_smpl_freq, site_smpl_revCumFreq, site_smpl_revCumPcnt)
+  freq_merge <- merge(rand_smpl_freq, site_smpl_freq, all = TRUE, by = 'value')
+  freq_merge[is.na(freq_merge)] <- 0
+  freq_merge$kg <- (1 - (freq_merge$rand_smpl_revCumPcnt/freq_merge$site_smpl_revCumPcnt))
+  return(freq_merge)
+}
+
+model_sens1 <- extract_values %>%
+  as_tibble() %>%
+  tidyr::nest(-model_num) %>%
+  mutate(rand_smpl = map(model_num, get_random_sample, sum_stack, 50000))
+
+model_sens2 <- model_sens1 %>%
+  mutate(rand_smpl_freq = map(rand_smpl, tabulate_sample),
+         site_smpl_freq = map(data, ~tabulate_sample(.[["sens"]])),
+         freq_merge     = map2(rand_smpl_freq, site_smpl_freq, cumulative_sum),
+         max_kg         = map_dbl(freq_merge, ~ max(.[["kg"]]))) %>%
+  arrange(desc(max_kg))
+
+
+
+
+
+
+
+
+
+
