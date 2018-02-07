@@ -29,6 +29,9 @@ if(isTRUE(use_parallel)){
 if(!dir.exists("RASTERS")){
   dir.create("RASTERS")
 }
+if(!dir.exists("GRD")){
+  dir.create("GRD")
+}
 
 ## projections details
 # unprojected WGS84
@@ -60,7 +63,8 @@ cl_525mi_buffSP  <- st_buffer(st_combine(clSP), 27720) %>%
   st_sf(.) %>%
   mutate(value = 1)
 # cl_525mi_buffSP    <- st_intersection(cl_525mi_buffSP, temp_bboxSP)  #### <- CROPPED FOR TESTING!!!!!!!
-cl_525mi_buffSP_sp <- as(cl_5mi_buffSP, "Spatial")
+cl_525mi_buffWGS <- st_transform(cl_525mi_buffSP, WGS84)
+cl_525mi_buffWGS_sp <- as(cl_525mi_buffWGS, "Spatial")
 
 #### RASTERS!!!! FTW!
 ### get Elevation data & crop
@@ -70,6 +74,7 @@ cl_525mi_buffSP_sp <- as(cl_5mi_buffSP, "Spatial")
 #                              res = output_res_ft) 
 # writeRaster(elevationSP,file.path("RASTERS","model_elevationSP.tiff"), overwrite=TRUE)
 # writeRaster(elevationSP,file.path("GRD","model_elevationSP.grd"),overwrite=TRUE)
+elevationSP <- raster(file.path("GRD","model_elevationSP.grd"))
 
 ####### MAKE VELOX TEMPLATE!!!!!!
 template <- elevationSP      # <- pre masked!
@@ -83,11 +88,12 @@ temp_vx <- velox(template)   # <- cast to velox class
 # slopeSP <- projectRaster(slope, elevationSP)
 # writeRaster(slopeSP,file.path("RASTERS","model_slope_degree.tiff"), overwrite=TRUE)
 # writeRaster(slopeSP,file.path("GRD","model_slope_degree.GRD"), overwrite=TRUE)
+slopeSP <- raster(file.path("GRD","model_slope_degree.GRD"))
 
 ### NED 
 NHD <- FedData::get_nhd(template=cl_525mi_buffWGS_sp, label='Oakdale_Fayette_model') ### <- change for full run
 # flowlines
-flowlines     <- NHD[["_Flowline"]]
+flowlines     <- NHD[[grep("Flowline",names(NHD))]]
 flowlinesSP   <- spTransform(flowlines, SPNYCentral83)
 flowlinesSP$raster <- 1
 flowline_vx   <- temp_vx$copy() # make copy of template
@@ -96,7 +102,7 @@ flowlinesSP_r <- flowline_vx$as.RasterLayer(band = 1) # cast back to raster obje
 writeRaster(flowlinesSP_r,file.path("RASTERS","flowlinesSP.tiff"), overwrite=TRUE)
 
 ## AREA (large streams)
-areas     <- NHD[["_Area"]]
+areas     <-  NHD[[grep("Area",names(NHD))]]
 areasSP   <- spTransform(areas, SPNYCentral83)
 areasSP$raster <- 1
 areas_vx  <- temp_vx$copy() # make copy of template
@@ -105,7 +111,7 @@ areasSP_r <- areas_vx$as.RasterLayer(band = 1) # cast back to raster object
 writeRaster(areasSP_r,file.path("RASTERS","areasSP.tiff"), overwrite=TRUE)
 
 ## Waterbodies
-waterbody     <- NHD[["_Waterbody"]]
+waterbody     <-  NHD[[grep("Waterbody",names(NHD))]]
 waterbodySP   <- spTransform(waterbody, SPNYCentral83)
 waterbodySP$raster <- 1
 waterbody_vx  <- temp_vx$copy() # make copy of template
@@ -117,13 +123,16 @@ writeRaster(waterbodySP_r,file.path("RASTERS","waterbodySP.tiff"), overwrite=TRU
 h20_stack <- stack(flowlinesSP_r, areasSP_r, waterbodySP_r )
 names(h20_stack) <- c("flowlines","areas","waterbodies")
 min_h20SP_r <- max(h20_stack)
+min_h20SP_r[min_h20SP_r != 1] <- NA
 writeRaster(min_h20SP_r,file.path("RASTERS","min_h20SP_r.tiff"), overwrite=TRUE)
 
-min_h20SP_dist <- distance(min_h20SP_r, progress = "text")
+# min_h20SP_dist <- distance(min_h20SP_r, progress = "text")
+min_h20SP_dist <- raster(file.path("RASTERS","model_min_h20SP_dist_esri.tif")) ### <- ESRI!!!
 min_h20SP_dist <- mask(min_h20SP_dist, elevationSP, progress = "text")
 writeRaster(min_h20SP_dist,file.path("RASTERS","model_min_h20SP_dist.tiff"), overwrite=TRUE)
 writeRaster(min_h20SP_dist,file.path("GRD","model_min_h20SP_dist.grd"), overwrite=TRUE)
 
+gc()
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
