@@ -7,8 +7,9 @@ data_loc <- "U:/z_OldServer/Projects/NY/Oakdale_Fayette_model/GIS"
 SHP_loc  <- file.path(data_loc,"SHP","Client_files")
 GRD_loc <- "C:/R_local/weighted_sens_model"
 
-sites <- read_sf(file.path(SHP_loc, "ArchaeoSitesPt.shp")) %>%
+sites <- read_sf(file.path(SHP_loc, "ArchaeoSitesPt_PreHist.shp")) %>%
   mutate(presence = 1)
+
 sites_buff <- st_buffer(sites, 50) # 50 ft radius buffer
 sites_buff_sp <- as(sites_buff, "Spatial")
 
@@ -91,13 +92,17 @@ model_sens2 <- model_sens1 %>%
   mutate(rand_smpl_freq = map(rand_smpl, tabulate_sample),
          site_smpl_freq = map(data, ~tabulate_sample(.[["sens"]])),
          freq_merge     = map2(rand_smpl_freq, site_smpl_freq, cumulative_sum),
-         max_kg         = map_dbl(freq_merge, ~ max(.[["kg"]]))) %>%
+         max_kg         = map_dbl(freq_merge, ~ max(.[["kg"]])),
+         kg_sites_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "site_smpl_revCumPcnt"]),
+         kg_backg_pcnt  = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "rand_smpl_revCumPcnt"]),
+         kg_threshold   = map2_dbl(freq_merge, max_kg, ~ .x[.x[,"kg"] == .y, "value"])) %>%
   arrange(desc(max_kg))
 
+max_kg_results <- model_sens2 %>%
+  dplyr::select(model_num, max_kg, kg_sites_pcnt, kg_backg_pcnt, kg_threshold)
 
-
-
-
+# view selected model's freq table
+model_sens2 %>% filter(model_num == 11) %>% select(freq_merge) %>% unnest()
 
 
 
