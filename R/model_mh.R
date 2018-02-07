@@ -68,13 +68,13 @@ cl_525mi_buffWGS_sp <- as(cl_525mi_buffWGS, "Spatial")
 
 #### RASTERS!!!! FTW!
 ### get Elevation data & crop
-elevation_full <- get_elev_raster(cl_5mi_buffWGS_sp, z = 12, src = "aws")
-elevation      <- mask(elevation_full, cl_5mi_buffWGS_sp)
-elevationSP    <- projectRaster(elevation, crs = CRS(SPNYCentral83),
-                             res = output_res_ft)
-writeRaster(elevationSP,file.path("RASTERS","model_elevationSP.tiff"), overwrite=TRUE)
-writeRaster(elevationSP,file.path("GRD","model_elevationSP.grd"),overwrite=TRUE)
-# elevationSP <- raster(file.path("GRD","model_elevationSP.grd"))
+# elevation_full <- get_elev_raster(cl_5mi_buffWGS_sp, z = 12, src = "aws")
+# elevation      <- mask(elevation_full, cl_5mi_buffWGS_sp)
+# elevationSP    <- projectRaster(elevation, crs = CRS(SPNYCentral83),
+#                              res = output_res_ft)
+# writeRaster(elevationSP,file.path("RASTERS","model_elevationSP.tiff"), overwrite=TRUE)
+# writeRaster(elevationSP,file.path("GRD","model_elevationSP.grd"),overwrite=TRUE)
+elevationSP <- raster(file.path("GRD","model_elevationSP.grd"))
 
 ####### MAKE VELOX TEMPLATE!!!!!!
 template <- elevationSP      # <- pre masked!
@@ -83,12 +83,12 @@ temp_vx <- velox(template)   # <- cast to velox class
 ###############
 
 # slope
-slope   <- raster::terrain(elevation, out = "slope", unit='radians')
-slope   <- tan(slope)*100
-slopeSP <- projectRaster(slope, elevationSP)
-writeRaster(slopeSP,file.path("RASTERS","model_slope_degree.tiff"), overwrite=TRUE)
-writeRaster(slopeSP,file.path("GRD","model_slope_degree.GRD"), overwrite=TRUE)
-# slopeSP <- raster(file.path("GRD","model_slope_degree.GRD"))
+# slope   <- raster::terrain(elevation, out = "slope", unit='radians')
+# slope   <- tan(slope)*100
+# slopeSP <- projectRaster(slope, elevationSP)
+# writeRaster(slopeSP,file.path("RASTERS","model_slope_degree.tiff"), overwrite=TRUE)
+# writeRaster(slopeSP,file.path("GRD","model_slope_degree.GRD"), overwrite=TRUE)
+slopeSP <- raster(file.path("GRD","model_slope_degree.GRD"))
 
 ### NED 
 NHD <- FedData::get_nhd(template=cl_525mi_buffWGS_sp, label='Oakdale_Fayette_model') ### <- change for full run
